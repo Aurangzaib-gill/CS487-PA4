@@ -234,26 +234,70 @@ TODO: Embed your architecture diagram from `docs/`.
 
 Description: TODO: Confirm that it shows GitHub, App Service, Durable Function, AKS, ACI, Blob Storage, ACR, and IAM.
 
-### Question 8.2: Service Selection
-
-TODO: In 3-4 sentences each, explain why TaskFlow uses App Service, Durable Functions, AKS, and ACI for their specific roles.
-
-### Question 8.3: ACI vs AKS
-
-TODO: Compare idle behavior, cost behavior, and operational model for AKS and ACI using your screenshots.
-
-### Question 8.4: Durable Functions vs Plain HTTP
-
-TODO: Explain at least two problems that Durable Functions solves for this sequential workflow.
-
-### Question 8.5: Cost Review
-
-TODO: Embed Cost Management screenshot scoped to your resource group.
-
-Description: TODO: Identify the most expensive resource and explain why.
-
-### Question 8.6: Challenges Faced
-
-TODO: Describe at least two real issues you hit and how you debugged them.
-
----
+ Task 8 Write-Up
+3.1 Service Selection
+App Service. Azure App Service is a good fit for the TaskFlow front-end because it provides managed
+hosting for a browser-facing web application with minimal operational overhead. The assignment needed
+GitHub-driven CI/CD, HTTPS hosting, and a stable public URL, all of which App Service supports directly
+through Deployment Center. Cost stays predictable because the web app runs on a fixed App Service plan
+rather than launching new infrastructure for each request. It also scales more simply than managing a
+container platform for a relatively lightweight UI.
+Durable Functions. Durable Functions are appropriate for the workflow layer because the application
+is not a single fast request-response action. Instead, it validates an order, conditionally starts a report
+generation step, and exposes polling endpoints while the process continues. Durable orchestration gives
+built-in state persistence, checkpoints, and status-query URLs, which are ideal for a workflow that can
+take up to about a minute. Operationally, this is much simpler than manually storing workflow state in a
+database and coordinating retries by hand.
+AKS. AKS is the right choice for the validator because the service behaves like a long-running HTTP API
+with an external endpoint. The validator benefits from a stable deployment object, service abstraction,
+and Kubernetes-style scaling model rather than one-shot execution. Even when traffic is low, the cluster
+remains provisioned and ready, which makes it operationally heavier and usually more expensive than server
+less options. That cost is acceptable here because the assignment explicitly requires learning Kubernetes
+deployment, networking, and service exposure.
+ACI. Azure Container Instances are a strong fit for the report generator because report generation is a
+short-lived batch job rather than a continuously served API. ACI starts a container for one run, lets it
+complete its work, and then the job can terminate without leaving a full orchestration platform running.
+This aligns well with cost efficiency because billing is tied to the container’s active lifetime instead of an
+always-on cluster. Operationally, it is much simpler than putting the same ephemeral report process into
+AKS.
+3.2 ACI vs. AKS: Hands-On Comparison
+When AKS is idle for ten minutes, the validator pod may receive no traffic, but the cluster still exists, the
+node VM remains allocated, and the service endpoint stays provisioned. In other words, idle on AKS means
+low application activity, not zero infrastructure cost. The cluster remains ready to serve immediately, which
+is useful for APIs but not especially cost-efficient for bursty one-shot work.
+In contrast, idle for ACI in this pipeline means there is no container instance running at all between report
+requests. The report job is created only when a valid order reaches report
+activity; outside that window
+there is nothing continuously serving traffic. If a malicious user submitted 1000 requests in a minute, ACI
+would likely create the largest burst-related cost because each valid request could launch another short-lived
+container. AKS would also incur load, but its baseline cost is already present; ACI’s cost grows more directly
+with the number of report jobs started.
+3.3 Why Durable Functions Instead of Plain HTTP Chaining
+Implementing the same flow with two plain HTTP-triggered functions would be harder because the appli
+cation would need to manage workflow state manually across multiple steps. A normal HTTP chain would
+need explicit storage for the order status, plus code to recover progress if the validation or report step failed
+CS487 PA4 Report Documentation
+Page 10
+midway. Long-running report generation also increases the chance of request timeouts or awkward client-side
+waiting, while Durable Functions natively support asynchronous start, checkpointing, and status polling.
+Retries are another major concern: Durable orchestration makes retryable, stateful coordination far easier
+than wiring two stateless HTTP calls together.
+3.4 Cost Review
+Based on the assignment design and the screenshot evidence, the single most expensive resource is the
+AKS cluster because it keeps compute allocated even when request volume is low. App Service and ACR
+typically contribute modest steady cost, while ACI charges are short-lived and tied to actual report runs.
+Blob Storage cost for generated PDFs should be minimal for a student workload. Although a dedicated
+Cost Analysis screenshot was not present in the uploaded archive, the deployment pattern strongly suggests
+AKS dominates the total assignment spend.
+3.5 Challenges Faced and Debugging Notes
+Two common integration challenges are visible in the evidence trail. First, the Function App smoke test
+reaches the orchestrator but fails before downstream integration is complete; this is exactly the sort of staged
+failure expected when environment variables such as VALIDATE
+URL are not yet configured. The screenshots
+show that debugging proceeded by checking the orchestration status JSON and then wiring the missing app
+settings.
+Second, the report pipeline depends on several coordinated settings: ACR credentials, report image name,
+storage account endpoint, and Function App identity. A misconfiguration in any of these values can prevent
+the report job from starting or writing its PDF. The evidence indicates the debugging strategy centered
+on validating application settings in the portal, confirming the blob container existed, and verifying the
+ACI/report execution path after infrastructure setup.
