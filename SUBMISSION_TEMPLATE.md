@@ -230,6 +230,10 @@ Description: TODO: Explain why no report ACI should be created for this order.
 
 ### Evidence 8.1: Architecture Diagram
 
+
+<img width="670" height="670" alt="image" src="https://github.com/user-attachments/assets/4affbc1c-dd21-4bc6-8928-464fe62c30a7" />
+
+
 TODO: Embed your architecture diagram from `docs/`.
 
 Description: TODO: Confirm that it shows GitHub, App Service, Durable Function, AKS, ACI, Blob Storage, ACR, and IAM.
